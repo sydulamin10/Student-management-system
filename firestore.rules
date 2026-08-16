@@ -1,0 +1,132 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function role() {
+      return signedIn() ? userDoc().role : null;
+    }
+
+    function isAdmin() {
+      return role() == 'admin';
+    }
+
+    function isTeacher() {
+      return role() == 'teacher';
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() && (isAdmin() || isOwner(userId) || isTeacher());
+      allow create: if signedIn() && isOwner(userId);
+      allow update: if isAdmin() || isOwner(userId);
+      allow delete: if isAdmin();
+    }
+
+    match /students/{studentId} {
+      allow read: if isAdmin() || isTeacher()
+        || (role() == 'student' && resource.data.userId == request.auth.uid)
+        || (role() == 'parent' && resource.data.id in userDoc().children);
+      allow write: if isAdmin() || isTeacher();
+    }
+
+    match /teachers/{teacherId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /parents/{parentId} {
+      allow read: if isAdmin() || isOwner(parentId);
+      allow write: if isAdmin();
+    }
+
+    match /classes/{classId} {
+      allow read: if signedIn();
+      allow write: if isAdmin() || isTeacher();
+    }
+
+    match /subjects/{subjectId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /attendance/{recordId} {
+      allow read: if isAdmin() || isTeacher()
+        || (role() == 'student' && resource.data.studentUserId == request.auth.uid)
+        || role() == 'parent';
+      allow write: if isAdmin() || isTeacher();
+    }
+
+    match /assignments/{assignmentId} {
+      allow read: if signedIn();
+      allow write: if isAdmin() || isTeacher();
+    }
+
+    match /submissions/{submissionId} {
+      allow read: if isAdmin() || isTeacher()
+        || resource.data.studentUserId == request.auth.uid
+        || role() == 'parent';
+      allow create: if signedIn();
+      allow update: if isAdmin() || isTeacher()
+        || resource.data.studentUserId == request.auth.uid;
+    }
+
+    match /exams/{examId} {
+      allow read: if signedIn();
+      allow write: if isAdmin() || isTeacher();
+    }
+
+    match /results/{resultId} {
+      allow read: if isAdmin() || isTeacher()
+        || resource.data.studentUserId == request.auth.uid
+        || role() == 'parent';
+      allow write: if isAdmin() || isTeacher();
+    }
+
+    match /fees/{feeId} {
+      allow read: if isAdmin()
+        || (role() == 'student' && resource.data.studentUserId == request.auth.uid)
+        || role() == 'parent';
+      allow write: if isAdmin();
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if signedIn();
+      allow write: if isAdmin() || isTeacher();
+    }
+
+    match /messages/{messageId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.participantIds;
+      allow create: if signedIn();
+      allow update: if signedIn() && request.auth.uid in resource.data.participantIds;
+    }
+
+    match /notifications/{notificationId} {
+      allow read, update: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if isAdmin() || isTeacher();
+    }
+
+    match /schedules/{scheduleId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /ai_insights/{insightId} {
+      allow read: if isAdmin() || isTeacher();
+      allow write: if isAdmin();
+    }
+
+    match /fcm_tokens/{userId} {
+      allow read, write: if signedIn() && (isAdmin() || isOwner(userId));
+    }
+  }
+}
